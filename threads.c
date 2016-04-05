@@ -5,7 +5,7 @@
 #include "util.h"
 
 enum thread_state {
-    NOT_STARTED, RUNNING, FINISHED, WAITING_TO_JOIN
+    NOT_STARTED_YET, RUNNING, FINISHED, WAITING_TO_JOIN
 };
 
 typedef enum thread_state thread_state_t;
@@ -30,7 +30,7 @@ struct thread_pool {
 typedef struct thread_pool thread_pool_t;
 
 struct thread_info {
-    uint64_t r15, r14, r13, r12, rbx, rbp;
+    uint64_t r15, r14, r13, r12, rbx, rbp; //threading.S
     void *start_thread_address;
 
     void *(*function_address)(void *);
@@ -47,7 +47,7 @@ static thread_pool_t thread_pool;
 void setup_threads() {
     thread_pool.first_free = 2;
     thread_pool.threads[1].state = RUNNING;
-    thread_pool.threads[0].state = NOT_STARTED;
+    thread_pool.threads[0].state = NOT_STARTED_YET;
     thread_pool.next[1] = thread_pool.prev[1] = 1;
     for (int i = 2; i < MAX_THREADS - 1; ++i) {
         thread_pool.next[i] = i + 1;
@@ -74,12 +74,7 @@ pid_t create_thread(void *(*fptr)(void *), void *arg) {
                                 + (uint8_t *) new_thread->stack_start
                                 - sizeof(thread_info_t);
     thread_info_t *init_val = new_thread->stack_pointer;
-    init_val->r12 = 0;
-    init_val->r13 = 0;
-    init_val->r14 = 0;
-    init_val->r15 = 0;
-    init_val->rbx = 0;
-    init_val->rbp = 0;
+    init_val->r12 = init_val->r13 = init_val->r14 = init_val ->r15 = init_val->rbx = init_val->rbp = 0;
     extern void *start_thread; //threading.S
     init_val->start_thread_address = &start_thread;
     init_val->function_address = fptr;
@@ -89,13 +84,13 @@ pid_t create_thread(void *(*fptr)(void *), void *arg) {
     return (pid_t) (new_thread - thread_pool.threads);
 }
 
-pid_t get_current_thread() {
+pid_t get_this_thread() {
     return current_thread;
 }
 
 void switch_threads(void **old_stack_pointer, void *new_stack_pointer); //threading.S
 
-void check_thread_finished() {
+void check_if_thread_finished() {
     volatile thread_t *thread = thread_pool.threads + previous_thread;
     if (thread->state == FINISHED && previous_thread != current_thread) {
         free_pages(thread->stack_start, thread->order);
@@ -113,12 +108,12 @@ void run_thread(pid_t thread_id) {
     previous_thread = ot;
     thread_t *othread = (thread_t *) thread_pool.threads + previous_thread;
     switch_threads(&othread->stack_pointer, thread->stack_pointer);
-    check_thread_finished();
+    check_if_thread_finished();
 }
 
-void finish_current_thread(void *val) {
+void finish_thread(void *val) {
     lock();
-    int ct = get_current_thread();
+    int ct = get_this_thread();
     volatile thread_t *current_t = thread_pool.threads + ct;
     current_t->state = FINISHED;
     current_t->ret_val = val;
@@ -149,7 +144,7 @@ void join_thread(pid_t thread, void **retval) {
     if (retval) {
         *retval = thread_pool.threads[thread].ret_val;
     }
-    thread_pool.threads[thread].state = NOT_STARTED;
+    thread_pool.threads[thread].state = NOT_STARTED_YET;
     lock();
     thread_pool.next[thread] = thread_pool.first_free;
     thread_pool.first_free = thread;

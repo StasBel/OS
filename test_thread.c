@@ -12,7 +12,7 @@ typedef enum {
 state_t buffer[MAX_THREADS];
 
 void *fun_finish(void *arg __attribute__((unused))) {
-    buffer[get_current_thread()] = MARKED;
+    buffer[get_this_thread()] = MARKED;
     return 0;
 }
 
@@ -28,14 +28,14 @@ void test_finish() {
 
 void *fun1_arg(void *arg) {
     assert(*(int *) arg == 1);
-    buffer[get_current_thread()] = MARKED;
+    buffer[get_this_thread()] = MARKED;
     run_somebody_else();
     return 0;
 }
 
 void *fun2_arg(void *arg) {
     assert(*(int *) arg == 2);
-    buffer[get_current_thread()] = MARKED;
+    buffer[get_this_thread()] = MARKED;
     run_somebody_else();
     return 0;
 }
@@ -53,7 +53,7 @@ void test_arg() {
 }
 
 void *fun1_lock(void *arg) {
-    pid_t id = get_current_thread();
+    pid_t id = get_this_thread();
     buffer[id] = MARKED;
     lock();
     buffer[id] = MARKED2;
@@ -66,7 +66,7 @@ void *fun1_lock(void *arg) {
 }
 
 void *fun2_lock(void *arg) {
-    pid_t id = get_current_thread();
+    pid_t id = get_this_thread();
     buffer[id] = MARKED;
     lock();
     buffer[id] = MARKED2;

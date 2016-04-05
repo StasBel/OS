@@ -4,13 +4,13 @@
 .globl switch_threads
 
 start_thread:
-        callq check_thread_finished
+        callq check_if_thread_finished
         callq unlock
         popq %rax
         popq %rdi
         callq *%rax
         movq %rax, %rdi
-        callq finish_current_thread
+        callq finish_thread
 loop:
         jmp loop
 
