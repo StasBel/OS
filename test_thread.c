@@ -3,6 +3,7 @@
 #include "stdio.h"
 #include "util.h"
 #include "lock.h"
+#include "kmem_cache.h"
 
 typedef enum {
     NOT_MARKED, MARKED, MARKED2
@@ -22,7 +23,7 @@ void test_finish() {
     buffer[thread] = NOT_MARKED;
     run_somebody_else();
     assert(buffer[thread] == MARKED);
-    printf("End test_finish:\n");
+    printf("End test_finish\n");
 }
 
 void *fun1_arg(void *arg) {
@@ -48,7 +49,7 @@ void test_arg() {
     run_somebody_else();
     assert(buffer[thread1] == MARKED);
     assert(buffer[thread2] == MARKED);
-    printf("End test_arg:\n");
+    printf("End test_arg\n");
 }
 
 void *fun1_lock(void *arg) {
@@ -89,7 +90,7 @@ void test_lock() {
     run_somebody_else();
     assert(buffer[thread1] = MARKED2);
     assert(buffer[thread2] = MARKED2);
-    printf("End test_lock:\n");
+    printf("End test_lock\n");
 }
 
 void *fun_join(void *arg) {
@@ -107,7 +108,24 @@ void test_join() {
     void *retval;
     join_thread(t1, &retval);
     assert(retval == &arg);
-    printf("End test_join:\n");
+    printf("End test_join\n");
+}
+
+void *fun_slab(void *arg) {
+    assert(arg == arg); //escape unused error
+    void *ptr = kmem_alloc(1 << 10);
+    kmem_free(ptr);
+    return 0;
+}
+
+void test_slab() {
+    printf("Start test_slab:\n");
+    const int TIMES = 10;
+    for (int i = 0; i < TIMES; i++) {
+        create_thread(fun_slab, 0);
+    }
+    run_somebody_else();
+    printf("End test_slab\n");
 }
 
 void test_threads() {
@@ -115,4 +133,5 @@ void test_threads() {
     test_arg();
     test_lock();
     test_join();
+    test_slab();
 }

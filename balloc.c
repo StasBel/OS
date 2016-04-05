@@ -4,6 +4,7 @@
 #include "string.h"
 #include "stdio.h"
 
+
 #define MAX_AREAS_COUNT 256
 
 struct balloc_area {

@@ -2,6 +2,7 @@
 #include "memory.h"
 #include "stdio.h"
 #include "list.h"
+#include "lock.h"
 
 
 struct kmem_slab_ops {
@@ -69,6 +70,7 @@ static bool kmem_cache_grow(struct kmem_cache *cache)
 
 void kmem_cache_reap(struct kmem_cache *cache)
 {
+	lock();
 	LIST_HEAD(list);
 
 	list_splice(&cache->free_list, &list);
@@ -84,10 +86,12 @@ void kmem_cache_reap(struct kmem_cache *cache)
 
 		free_pages(pages, cache->order);	
 	}
+	unlock();
 }
 
 void *kmem_cache_alloc(struct kmem_cache *cache)
 {
+	lock();
 	if (!list_empty(&cache->part_list)) {
 		struct list_head *node = list_first(&cache->part_list);
 		struct kmem_slab *slab =
@@ -117,6 +121,8 @@ void *kmem_cache_alloc(struct kmem_cache *cache)
 	list_del(&slab->link);
 	list_add(&slab->link, &cache->part_list);
 
+	unlock();
+
 	return ptr;
 }
 
@@ -129,6 +135,7 @@ static struct kmem_slab *kmem_get_slab(void *ptr)
 
 void kmem_cache_free(struct kmem_cache *cache, void *ptr)
 {
+	lock();
 	struct kmem_slab *slab = kmem_get_slab(ptr);
 
 	slab->ops->free(cache, slab, ptr);
@@ -144,6 +151,7 @@ void kmem_cache_free(struct kmem_cache *cache, void *ptr)
 		list_del(&slab->link);
 		list_add(&slab->link, &cache->part_list);
 	}
+	unlock();
 }
 
 

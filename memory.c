@@ -5,6 +5,7 @@
 #include "balloc.h"
 #include "stdio.h"
 #include "misc.h"
+#include "lock.h"
 
 #define MAX_MEMORY_NODES (1 << PAGE_NODE_BITS)
 
@@ -231,6 +232,7 @@ static pfn_t buddy_pfn(pfn_t pfn, int order)
 
 static struct page *__alloc_pages_node(int order, struct memory_node *node)
 {
+    lock();
 	int coorder = order;
 
 	while (coorder < BUDDY_ORDERS) {
@@ -259,6 +261,7 @@ static struct page *__alloc_pages_node(int order, struct memory_node *node)
 		list_add(&buddy->link, &node->free_list[coorder]);
 	}
 
+    unlock();
 	return page;
 }
 
@@ -292,6 +295,7 @@ void dump_buddy_state(void)
 static void __free_pages_node(struct page *pages, int order,
 			struct memory_node *node)
 {
+    lock();
 	const pfn_t node_pfns = node->end_pfn - node->begin_pfn;
 	pfn_t pfn = node_pfn(node, pages);
 
@@ -325,6 +329,7 @@ static void __free_pages_node(struct page *pages, int order,
 	page_set_free(pages);
 
 	list_add(&pages->link, &node->free_list[order]);
+    unlock();
 }
 
 void free_pages_node(struct page *pages, int order, struct memory_node *node)
@@ -337,6 +342,7 @@ void free_pages_node(struct page *pages, int order, struct memory_node *node)
 
 struct page *__alloc_pages(int order, int type)
 {
+	lock();
 	const struct list_head *head = &node_order;
 	struct list_head *ptr = node_type[type];
 
@@ -349,6 +355,7 @@ struct page *__alloc_pages(int order, int type)
 			return pages;
 	}
 
+	unlock();
 	return 0;
 }
 
@@ -359,10 +366,12 @@ struct page *alloc_pages(int order)
 
 void free_pages(struct page *pages, int order)
 {
+	lock();
 	if (!pages)
 		return;
 
 	struct memory_node *node = page_node(pages);
 
 	free_pages_node(pages, order, node);
+	unlock();
 }
