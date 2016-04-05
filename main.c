@@ -7,7 +7,7 @@
 #include "misc.h"
 #include "time.h"
 #include "threads.h"
-#include "test_thread.h"
+#include "test_threads.h"
 
 static bool range_intersect(phys_t l0, phys_t r0, phys_t l1, phys_t r1)
 {
