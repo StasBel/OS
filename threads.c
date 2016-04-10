@@ -136,18 +136,17 @@ void run_somebody_else() {
 }
 
 
-void join_thread(pid_t thread, void **retval) {
+void *join_thread(pid_t thread) {
     while (thread_pool.threads[thread].state != WAITING_TO_JOIN) {
         run_somebody_else();
         barrier();
     }
-    if (retval) {
-        *retval = thread_pool.threads[thread].ret_val;
-    }
-    thread_pool.threads[thread].state = NOT_STARTED_YET;
     lock();
+    void *ret_val = thread_pool.threads[thread].ret_val;
+    thread_pool.threads[thread].state = NOT_STARTED_YET;
     thread_pool.next[thread] = thread_pool.first_free;
     thread_pool.first_free = thread;
     unlock();
+    return ret_val;
 }
 

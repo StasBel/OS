@@ -104,10 +104,9 @@ void *fun_join(void *arg) {
 void test_join() {
     printf("Start test_join:\n");
     int arg = 5;
-    pid_t t1 = create_thread(fun_join, &arg);
-    void *retval;
-    join_thread(t1, &retval);
-    assert(retval == &arg);
+    pid_t thread = create_thread(fun_join, &arg);
+    void *ret_val = join_thread(thread);
+    assert(ret_val == &arg);
     printf("End test_join\n");
 }
 

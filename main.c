@@ -108,12 +108,13 @@ void main(void)
 	setup_paging();
 	setup_alloc();
 	setup_time();
-	local_irq_enable();
 
 	buddy_smoke_test();
 	slab_smoke_test();
 
     setup_threads();
+	local_irq_enable();
+
     test_threads();
 
     printf("FINISH SETUP\n");

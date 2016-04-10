@@ -3,6 +3,7 @@
 #include "ioport.h"
 #include "stdio.h"
 #include "time.h"
+#include "threads.h"
 
 /*
  * Timer/Counter Control Register Format:
@@ -52,10 +53,23 @@ static void i8254_set_frequency(unsigned long freq)
 
 unsigned long long jiffies;
 
+const int div = 59659;
+static double current_time = 0;
+static double last_scheduler_time = 0;
+const int FREC = 1193180;
+
 static void i8254_interrupt_handler(int irq)
 {
 	(void) irq;
 	++jiffies;
+
+    current_time += div * 1.0 / FREC;
+
+    if (current_time - last_scheduler_time > 0.01) {
+        last_scheduler_time = current_time;
+        out8(0x20, 0x20); // send EOI
+        run_somebody_else();
+    }
 }
 
 void setup_time(void)
