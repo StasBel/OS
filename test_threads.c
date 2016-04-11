@@ -17,6 +17,7 @@ void *fun_finish(void *arg __attribute__((unused))) {
 }
 
 void test_finish() {
+    start_no_irq();
     printf("Start test_finish:\n");
     int arg = 0;
     pid_t thread = create_thread(fun_finish, &arg);
@@ -24,6 +25,7 @@ void test_finish() {
     run_somebody_else();
     assert(buffer[thread] == MARKED);
     printf("End test_finish\n");
+    end_no_irq();
 }
 
 void *fun1_arg(void *arg) {
@@ -41,6 +43,7 @@ void *fun2_arg(void *arg) {
 }
 
 void test_arg() {
+    start_no_irq();
     printf("Start test_arg:\n");
     int arg1 = 1, arg2 = 2;
     pid_t thread1 = create_thread(fun1_arg, &arg1), thread2 = create_thread(fun2_arg, &arg2);
@@ -50,6 +53,7 @@ void test_arg() {
     assert(buffer[thread1] == MARKED);
     assert(buffer[thread2] == MARKED);
     printf("End test_arg\n");
+    end_no_irq();
 }
 
 spin_lock_t spin_lock1;
@@ -82,6 +86,7 @@ void *fun2_lock(void *arg) {
 }
 
 void test_lock() {
+    start_no_irq();
     printf("Start test_lock:\n");
     int common_arg = 0;
     pid_t thread1 = create_thread(fun1_lock, &common_arg), thread2 = create_thread(fun2_lock, &common_arg);
@@ -94,6 +99,7 @@ void test_lock() {
     assert(buffer[thread1] = MARKED2);
     assert(buffer[thread2] = MARKED2);
     printf("End test_lock\n");
+    end_no_irq();
 }
 
 void *fun_join(void *arg) {

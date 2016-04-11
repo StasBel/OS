@@ -107,11 +107,14 @@ void *kmem_cache_alloc(struct kmem_cache *cache)
 			list_del(&slab->link);
 			list_add(&slab->link, &cache->full_list);
 		}
+        unlock(&spin_lock);
 		return ptr;
 	}
 
-	if (list_empty(&cache->free_list) && !kmem_cache_grow(cache))
-		return 0;
+	if (list_empty(&cache->free_list) && !kmem_cache_grow(cache)) {
+        unlock(&spin_lock);
+        return 0;
+    }
 
 	struct list_head *node = list_first(&cache->free_list);
 	struct kmem_slab *slab = LIST_ENTRY(node, struct kmem_slab, link);
@@ -146,6 +149,7 @@ void kmem_cache_free(struct kmem_cache *cache, void *ptr)
 	if (slab->free == slab->total) {
 		list_del(&slab->link);
 		list_add(&slab->link, &cache->free_list);
+        unlock(&spin_lock);
 		return;
 	}
 

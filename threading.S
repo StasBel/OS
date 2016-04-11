@@ -5,7 +5,7 @@
 
 start_thread:
         callq check_if_thread_finished
-        callq unlock
+        callq end_no_irq
         popq %rax
         popq %rdi
         callq *%rax

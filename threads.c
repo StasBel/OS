@@ -104,7 +104,7 @@ void run_thread(pid_t thread_id) {
     int ot = current_thread;
     current_thread = thread_id;
     previous_thread = ot;
-    thread_t *othread = (thread_t *) thread_pool.threads + previous_thread;
+    thread_t *othread = (thread_t *) thread_pool.threads + ot;
     switch_threads(&othread->stack_pointer, thread->stack_pointer);
     check_if_thread_finished();
 }

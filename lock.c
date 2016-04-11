@@ -4,7 +4,7 @@
 
 
 void lock(spin_lock_t *spin_lock) {
-    int pass = __sync_fetch_and_add(&spin_lock->pass, 1);
+    const int pass = __sync_fetch_and_add(&spin_lock->users, 1);
     while (spin_lock->pass != pass) {
         barrier();
         run_somebody_else();

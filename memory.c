@@ -243,8 +243,10 @@ static struct page *__alloc_pages_node(int order, struct memory_node *node)
 		++coorder;
 	}
 
-	if (coorder >= BUDDY_ORDERS)
-		return 0;
+	if (coorder >= BUDDY_ORDERS){
+        unlock(&spin_lock);
+        return 0;
+    }
 
 	struct page *page = LIST_ENTRY(list_first(&node->free_list[coorder]),
 				struct page, link);
@@ -344,7 +346,6 @@ void free_pages_node(struct page *pages, int order, struct memory_node *node)
 
 struct page *__alloc_pages(int order, int type)
 {
-	lock(&spin_lock);
 	const struct list_head *head = &node_order;
 	struct list_head *ptr = node_type[type];
 
@@ -353,11 +354,11 @@ struct page *__alloc_pages(int order, int type)
 					link);
 		struct page *pages = alloc_pages_node(order, node);
 
-		if (pages)
-			return pages;
+		if (pages) {
+            return pages;
+        }
 	}
 
-	unlock(&spin_lock);
 	return 0;
 }
 
@@ -368,12 +369,11 @@ struct page *alloc_pages(int order)
 
 void free_pages(struct page *pages, int order)
 {
-	lock(&spin_lock);
-	if (!pages)
-		return;
+	if (!pages){
+        return;
+    }
 
 	struct memory_node *node = page_node(pages);
 
 	free_pages_node(pages, order, node);
-	unlock(&spin_lock);
 }
