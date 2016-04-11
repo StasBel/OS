@@ -32,9 +32,7 @@ typedef struct thread_pool thread_pool_t;
 struct thread_info {
     uint64_t r15, r14, r13, r12, rbx, rbp; //threading.S
     void *start_thread_address;
-
     void *(*function_address)(void *);
-
     void *argument;
 };
 
@@ -66,7 +64,7 @@ volatile thread_t *get_free_thread() {
 }
 
 pid_t create_thread(void *(*fptr)(void *), void *arg) {
-    lock();
+    start_no_irq();
     volatile thread_t *new_thread = get_free_thread();
     new_thread->order = 10;
     new_thread->stack_start = alloc_pages(new_thread->order);
@@ -80,7 +78,7 @@ pid_t create_thread(void *(*fptr)(void *), void *arg) {
     init_val->function_address = fptr;
     init_val->argument = arg;
     new_thread->state = RUNNING;
-    unlock();
+    end_no_irq();
     return (pid_t) (new_thread - thread_pool.threads);
 }
 
@@ -112,19 +110,19 @@ void run_thread(pid_t thread_id) {
 }
 
 void finish_thread(void *val) {
-    lock();
-    int ct = get_this_thread();
-    volatile thread_t *current_t = thread_pool.threads + ct;
+    start_no_irq();
+    int ct_id = get_this_thread();
+    volatile thread_t *current_t = thread_pool.threads + ct_id;
     current_t->state = FINISHED;
     current_t->ret_val = val;
-    thread_pool.prev[thread_pool.next[ct]] = thread_pool.prev[ct];
-    thread_pool.next[thread_pool.prev[ct]] = thread_pool.next[ct];
-    unlock();
+    thread_pool.prev[thread_pool.next[ct_id]] = thread_pool.prev[ct_id];
+    thread_pool.next[thread_pool.prev[ct_id]] = thread_pool.next[ct_id];
+    end_no_irq();
     run_somebody_else();
 }
 
 void run_somebody_else() {
-    lock();
+    start_no_irq();
     for (pid_t index = thread_pool.next[current_thread]; ; index = thread_pool.next[current_thread]) {
         if (index == 0 || thread_pool.threads[index].state != RUNNING) {
             continue;
@@ -132,7 +130,7 @@ void run_somebody_else() {
         run_thread(index);
         break;
     }
-    unlock();
+    end_no_irq();
 }
 
 
@@ -141,12 +139,12 @@ void *join_thread(pid_t thread) {
         run_somebody_else();
         barrier();
     }
-    lock();
+    start_no_irq();
     void *ret_val = thread_pool.threads[thread].ret_val;
     thread_pool.threads[thread].state = NOT_STARTED_YET;
     thread_pool.next[thread] = thread_pool.first_free;
     thread_pool.first_free = thread;
-    unlock();
+    end_no_irq();
     return ret_val;
 }
 
