@@ -68,9 +68,11 @@ static bool kmem_cache_grow(struct kmem_cache *cache)
 	return true;
 }
 
+static spin_lock_t spin_lock;
+
 void kmem_cache_reap(struct kmem_cache *cache)
 {
-	lock();
+	lock(&spin_lock);
 	LIST_HEAD(list);
 
 	list_splice(&cache->free_list, &list);
@@ -86,12 +88,12 @@ void kmem_cache_reap(struct kmem_cache *cache)
 
 		free_pages(pages, cache->order);	
 	}
-	unlock();
+	unlock(&spin_lock);
 }
 
 void *kmem_cache_alloc(struct kmem_cache *cache)
 {
-	lock();
+	lock(&spin_lock);
 	if (!list_empty(&cache->part_list)) {
 		struct list_head *node = list_first(&cache->part_list);
 		struct kmem_slab *slab =
@@ -121,7 +123,7 @@ void *kmem_cache_alloc(struct kmem_cache *cache)
 	list_del(&slab->link);
 	list_add(&slab->link, &cache->part_list);
 
-	unlock();
+	unlock(&spin_lock);
 
 	return ptr;
 }
@@ -135,7 +137,7 @@ static struct kmem_slab *kmem_get_slab(void *ptr)
 
 void kmem_cache_free(struct kmem_cache *cache, void *ptr)
 {
-	lock();
+	lock(&spin_lock);
 	struct kmem_slab *slab = kmem_get_slab(ptr);
 
 	slab->ops->free(cache, slab, ptr);
@@ -151,7 +153,7 @@ void kmem_cache_free(struct kmem_cache *cache, void *ptr)
 		list_del(&slab->link);
 		list_add(&slab->link, &cache->part_list);
 	}
-	unlock();
+	unlock(&spin_lock);
 }
 
 

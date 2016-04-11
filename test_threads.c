@@ -52,29 +52,32 @@ void test_arg() {
     printf("End test_arg\n");
 }
 
+spin_lock_t spin_lock1;
+spin_lock_t spin_lock2;
+
 void *fun1_lock(void *arg) {
     pid_t id = get_this_thread();
     buffer[id] = MARKED;
-    lock();
+    lock(&spin_lock1);
     buffer[id] = MARKED2;
-    lock();
+    lock(&spin_lock2);
     *(int *) arg = 1;
     printf("test_lock common_arg:%d\n", *(int *) arg);
-    unlock();
-    unlock();
+    unlock(&spin_lock2);
+    unlock(&spin_lock1);
     return 0;
 }
 
 void *fun2_lock(void *arg) {
     pid_t id = get_this_thread();
     buffer[id] = MARKED;
-    lock();
+    lock(&spin_lock1);
     buffer[id] = MARKED2;
-    lock();
+    lock(&spin_lock2);
     *(int *) arg = 2;
     printf("test_lock common_arg:%d\n", *(int *) arg);
-    unlock();
-    unlock();
+    unlock(&spin_lock2);
+    unlock(&spin_lock1);
     return 0;
 }
 
