@@ -1,5 +1,5 @@
-CC := gcc
-LD := gcc
+CC := x86_64-elf-gcc
+LD := x86_64-elf-gcc
 
 CFLAGS := -g -m64 -mno-red-zone -mno-mmx -mno-sse -mno-sse2 -ffreestanding \
 	-mcmodel=kernel -Wall -Wextra -Werror -pedantic -std=c99 \
@@ -13,7 +13,7 @@ ADEP := $(ASM:.S=.d)
 SRC := backtrace.c time.c interrupt.c i8259a.c stdio.c vsinkprintf.c stdlib.c \
 	serial.c console.c string.c ctype.c list.c main.c misc.c balloc.c \
 	memory.c paging.c error.c kmem_cache.c lock.c threads.c test_threads.c \
-	file_system.c initramfs.c
+	files.c initramfs.c
 OBJ := $(AOBJ) $(SRC:.c=.o)
 DEP := $(ADEP) $(SRC:.c=.d)
 

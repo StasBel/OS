@@ -3,7 +3,7 @@
 #include "string.h"
 #include "multiboot.h"
 #include "balloc.h"
-#include "file_system.h"
+#include "files.h"
 #include "memory.h"
 
 static char *align4(char *addr) {

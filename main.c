@@ -7,7 +7,7 @@
 #include "misc.h"
 #include "time.h"
 #include "threads.h"
-#include "file_system.h"
+#include "files.h"
 #include "lock.h"
 #include "initramfs.h"
 
