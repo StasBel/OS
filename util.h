@@ -2,6 +2,7 @@
 
 #include <stddef.h>
 #include "ioport.h"
+#include "stdio.h"
 
 #define cli() __asm__ volatile ("cli" : : : "cc")
 #define sti() __asm__ volatile ("sti" : : : "cc")
@@ -32,6 +33,26 @@ static inline int strncmp(const char *from, const char *to, size_t len) {
     } else {
         return 1;
     }
+}
+
+static inline char *align4(char *addr) {
+    return ((uint64_t) addr & 3) == 0 ? addr : addr + (4 - ((uint64_t) addr & 3));
+}
+
+static inline uint32_t read_int(char *str) {
+    uint32_t result = 0;
+    for (int i = 0; i < 8; i++) {
+        result <<= 4;
+        if (str[i] >= '0' && str[i] <= '9')
+            result += str[i] - '0';
+        else if (str[i] >= 'A' && str[i] <= 'F')
+            result += str[i] - 'A' + 10;
+        else if (str[i] >= 'a' && str[i] <= 'f')
+            result += str[i] - 'a' + 10;
+        else
+            printf("Incorrect integer: %s\n", str);
+    }
+    return result;
 }
 
 #define	assert(e) \

@@ -1,39 +1,20 @@
 #include "initramfs.h"
 #include "stdio.h"
-#include "string.h"
 #include "multiboot.h"
 #include "balloc.h"
 #include "files.h"
 #include "memory.h"
+#include "util.h"
+#include "string.h"
 
-static char *align4(char *addr) {
-    return ((uint64_t) addr & 3) == 0 ? addr : addr + (4 - ((uint64_t) addr & 3));
-}
-
-static uint32_t read_int(char *str) {
-    uint32_t result = 0;
-    for (int i = 0; i < 8; i++) {
-        result <<= 4;
-        if (str[i] >= '0' && str[i] <= '9')
-            result += str[i] - '0';
-        else if (str[i] >= 'A' && str[i] <= 'F')
-            result += str[i] - 'A' + 10;
-        else if (str[i] >= 'a' && str[i] <= 'f')
-            result += str[i] - 'a' + 10;
-        else
-            printf("Incorrect integer in cpio header: %s\n", str);
-    }
-    return result;
-}
-
-static char *start, *end;
+static char *begin, *end;
 
 void setup_initramfs() {
     extern const uint32_t mboot_info;
     multiboot_info_t *multiboot_info = (multiboot_info_t *) (uintptr_t) mboot_info;
 
     if (!(multiboot_info->flags & (1 << 3))) {
-        puts("No modules from multiboot!");
+        printf("No module!");
         return;
     }
 
@@ -49,37 +30,38 @@ void setup_initramfs() {
     }
 
     if (!found) {
-        puts("Can't find cpio module");
+        printf("No module!");
         return;
     }
 
-    start = (char *) (uintptr_t) module->mod_start;
+    begin = (char *) (uintptr_t) module->mod_start;
     end = (char *) (uintptr_t) module->mod_end;
 
     printf("reserve memory range: %llu-%llu for initramfs\n",
-           (unsigned long long) start,
+           (unsigned long long) begin,
            (unsigned long long) end - 1);
-    balloc_add_region((phys_t) start, end - start);
-    balloc_reserve_region((phys_t) start, end - start);
+    balloc_add_region((phys_t) begin, end - begin);
+    balloc_reserve_region((phys_t) begin, end - begin);
 }
 
 void read_initramfs() {
-    start = va((phys_t) start);
+    begin = va((phys_t) begin);
     end = va((phys_t) end);
-    while (start < end) {
-        start = align4(start);
-        DBG_ASSERT(!memcmp(start, CPIO_HEADER_MAGIC, 6));
-        cpio_header_t *header = (cpio_header_t *) start;
+    while (begin < end) {
+        begin = align4(begin);
+        DBG_ASSERT(!memcmp(begin, CPIO_HEADER_MAGIC, 6));
+        cpio_header_t *header = (cpio_header_t *) begin;
         uint32_t name_len = read_int(header->namesize);
         uint32_t file_len = read_int(header->filesize);
-        start += sizeof(cpio_header_t);
-        if (!memcmp(start, END_OF_ARCHIVE, strlen(END_OF_ARCHIVE))) {
+        begin += sizeof(cpio_header_t);
+        if (!memcmp(begin, END_OF_ARCHIVE, strlen(END_OF_ARCHIVE))) {
             return;
         }
+
         char file_name[MAX_FILES];
         file_name[0] = '/';
-        for (uint32_t i = 0; i < name_len; i++, start++) {
-            file_name[i + 1] = *start;
+        for (uint32_t i = 0; i < name_len; i++, begin++) {
+            file_name[i + 1] = *begin;
         }
         file_name[name_len] = 0;
         int file = -1;
@@ -88,10 +70,12 @@ void read_initramfs() {
         } else {
             file = open(file_name, CREATE | READ_WRITE);
         }
-        start = align4(start);
+
+        begin = align4(begin);
         if (file != -1) {
-            DBG_ASSERT(write(file, start, file_len) == file_len);
+            DBG_ASSERT(write(file, begin, file_len) == file_len);
         }
-        start += file_len;
+
+        begin += file_len;
     }
 }
