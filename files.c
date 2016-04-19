@@ -3,7 +3,6 @@
 #include "lock.h"
 #include "memory.h"
 #include "util.h"
-#include "stdio.h"
 
 #define TRUE 1
 #define FALSE 0
@@ -133,7 +132,6 @@ inode_t *find_file(char *path, int force, int is_dir) {
                     } else {
                         child = create_new_file(path + pos);
                     }
-                    // child = create_new(path + pos);
                     child->next = node->child;
                     node->child = child;
                     return child;
@@ -157,6 +155,7 @@ int open(char *path, int flags) {
     start_no_irq();
 
     if (!NO_CONTRADICTION(flags)) {
+        end_no_irq();
         return -1;
     }
 
@@ -172,6 +171,7 @@ int open(char *path, int flags) {
     file_descs[id].inode = find_file(path, force, FALSE);
 
     if (file_descs[id].inode == NULL) {
+        end_no_irq();
         return -1;
     }
     file_descs[id].flags = flags;
@@ -183,7 +183,7 @@ int open(char *path, int flags) {
     if (flags & APPEND) {
         file_descs[id].cur_pos = file_descs[id].inode->size;
     }
-    file_descs[id].is_free = 0;
+    file_descs[id].is_free = FALSE;
 
     end_no_irq();
     return id;
@@ -201,11 +201,13 @@ int correct_filesdesc(int desc) {
 
 int close(int desc) {
     start_no_irq();
+
     if (!correct_filesdesc(desc)) {
         end_no_irq();
         return -1;
     }
     file_descs[desc].is_free = TRUE;
+
     end_no_irq();
     return 0;
 }
@@ -218,7 +220,7 @@ long read(int desc, void *buf, size_t n) {
         return -1;
     }
 
-    struct inode *node = file_descs[desc].inode;
+    inode_t *node = file_descs[desc].inode;
 
     size_t k = 0;
 
@@ -245,6 +247,7 @@ void reallocate(struct inode *node) {
 
 long write(int desc, void *buf, size_t n) {
     start_no_irq();
+
     if (!correct_filesdesc(desc) || (file_descs[desc].flags & READ_ONLY)) {
         end_no_irq();
         return -1;
@@ -299,6 +302,7 @@ void closedir(dir_t *dir) {
 
 inode_t *readdir(char *path) {
     start_no_irq();
+
     dir_t *dir = opendir(path);
     inode_t *res = *dir;
     if (res == NULL) {
@@ -307,6 +311,7 @@ inode_t *readdir(char *path) {
     }
     *dir = res->next;
     closedir(dir);
-    start_no_irq();
+
+    end_no_irq();
     return res;
 }
