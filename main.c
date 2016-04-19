@@ -7,28 +7,33 @@
 #include "misc.h"
 #include "time.h"
 #include "threads.h"
-#include "test_threads.h"
+#include "file_system.h"
 #include "lock.h"
+#include "initramfs.h"
 
-void main(void)
-{
+#define STUCK while(1)
+
+void main(void) {
     start_no_irq();
 
-	setup_serial();
-	setup_misc();
-	setup_ints();
-	setup_memory();
-	setup_buddy();
-	setup_paging();
-	setup_alloc();
+    setup_serial();
+    setup_misc();
+    setup_ints();
+    setup_memory();
+    setup_initramfs();
+    setup_buddy();
+    setup_paging();
+    setup_alloc();
 
     setup_threads();
-    local_irq_enable();
     setup_time();
 
-    test_threads();
+    setup_file_system();
+    read_initramfs();
+
+    end_no_irq();
 
     printf("FINISH SETUP\n");
 
-	while (1);
+    STUCK;
 }
