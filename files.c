@@ -285,8 +285,10 @@ dir_t *opendir_inode(struct inode *node) {
     if (node == NULL || !node->is_dir) {
         return NULL;
     }
+
     dir_t *res = kmem_alloc(sizeof(dir_t));
     *res = node->child;
+
     return res;
 }
 
