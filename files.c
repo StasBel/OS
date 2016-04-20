@@ -2,7 +2,6 @@
 #include "kmem_cache.h"
 #include "lock.h"
 #include "memory.h"
-#include "util.h"
 
 #define TRUE 1
 #define FALSE 0
@@ -25,6 +24,8 @@ typedef struct kmem_cache slab_ctl_t;
 static file_desc_t file_descs[MAX_FILES];
 static slab_ctl_t *inode_slab_ctl;
 static dir_t root;
+
+static DEFINE_SPINLOCK(spin_lock_files);
 
 void setup_file_system() {
     for (int i = 0; i < MAX_FILES; i++) {
@@ -73,15 +74,12 @@ inode_t *get_clear_inode_with_name(char *name) {
 
     size_t len = strlen(name);
     new_node->name = kmem_alloc(len + 1);
-
     for (size_t i = 0; i < len; ++i) {
         new_node->name[i] = name[i];
     }
     new_node->name[len] = 0;
-
     new_node->size = 0;
-    new_node->capacity = 0;
-
+    new_node->capacity_step = 0; // 1 PAGE_SIZE
     new_node->child = NULL;
     new_node->next = NULL;
 
@@ -92,7 +90,7 @@ inode_t *create_new_file(char *name) {
     inode_t *new_node = get_clear_inode_with_name(name);
 
     new_node->is_dir = FALSE;
-    new_node->file_start = kmem_alloc((size_t) new_node->capacity);
+    new_node->file_start = kmem_alloc(PAGE_SIZE);
 
     return new_node;
 }
@@ -117,6 +115,7 @@ inode_t *find_file(char *path, int force, int is_dir) {
         if (!node->is_dir) {
             return NULL;
         }
+
         inode_t *child = node->child;
         while (child != NULL && (strlen(child->name) != len || (strncmp(child->name, path + pos, len) != 0))) {
             child = child->next;
@@ -152,10 +151,10 @@ inode_t *find_file(char *path, int force, int is_dir) {
 }
 
 int open(char *path, int flags) {
-    start_no_irq();
+    lock(&spin_lock_files);
 
     if (!NO_CONTRADICTION(flags)) {
-        end_no_irq();
+        unlock(&spin_lock_files);
         return -1;
     }
 
@@ -171,7 +170,7 @@ int open(char *path, int flags) {
     file_descs[id].inode = find_file(path, force, FALSE);
 
     if (file_descs[id].inode == NULL) {
-        end_no_irq();
+        unlock(&spin_lock_files);
         return -1;
     }
     file_descs[id].flags = flags;
@@ -185,7 +184,7 @@ int open(char *path, int flags) {
     }
     file_descs[id].is_free = FALSE;
 
-    end_no_irq();
+    unlock(&spin_lock_files);
     return id;
 }
 
@@ -200,23 +199,23 @@ int correct_filesdesc(int desc) {
 }
 
 int close(int desc) {
-    start_no_irq();
+    lock(&spin_lock_files);
 
     if (!correct_filesdesc(desc)) {
-        end_no_irq();
+        unlock(&spin_lock_files);
         return -1;
     }
     file_descs[desc].is_free = TRUE;
 
-    end_no_irq();
+    unlock(&spin_lock_files);
     return 0;
 }
 
 long read(int desc, void *buf, size_t n) {
-    start_no_irq();
+    lock(&spin_lock_files);
 
     if (!correct_filesdesc(desc) || (file_descs[desc].flags & WRITE_ONLY)) {
-        end_no_irq();
+        unlock(&spin_lock_files);
         return -1;
     }
 
@@ -229,27 +228,27 @@ long read(int desc, void *buf, size_t n) {
         file_descs[desc].cur_pos++;
     }
 
-    end_no_irq();
+    unlock(&spin_lock_files);
     return k;
 }
 
-void reallocate(struct inode *node) {
-    void *new_page = kmem_alloc((size_t) node->capacity + 1);
+void reallocate(inode_t *node) {
+    void *new_page = kmem_alloc((1LLU << (node->capacity_step + 1)) * PAGE_SIZE);
 
-    node->capacity++;
+    node->capacity_step++;
     for (size_t i = 0; i < node->size; ++i) {
         ((char *) new_page)[i] = ((char *) node->file_start)[i];
     }
 
-    free_pages(node->file_start, node->capacity - 1);
+    free_pages(node->file_start, node->capacity_step - 1);
     node->file_start = new_page;
 }
 
 long write(int desc, void *buf, size_t n) {
-    start_no_irq();
+    lock(&spin_lock_files);
 
     if (!correct_filesdesc(desc) || (file_descs[desc].flags & READ_ONLY)) {
-        end_no_irq();
+        unlock(&spin_lock_files);
         return -1;
     }
 
@@ -260,16 +259,15 @@ long write(int desc, void *buf, size_t n) {
         if (file_descs[desc].cur_pos == node->size) {
             ++node->size;
         }
-        if (file_descs[desc].cur_pos == (1LLU << node->capacity) * PAGE_SIZE) {
+        if (file_descs[desc].cur_pos == (1LLU << node->capacity_step) * PAGE_SIZE) {
             reallocate(node);
         }
-
         *(((char *) node->file_start) + file_descs[desc].cur_pos) = ((char *) buf)[k];
         file_descs[desc].cur_pos++;
     }
 
-    end_no_irq();
-    return n;
+    unlock(&spin_lock_files);
+    return k;
 }
 
 int mkdir(char *path) {
@@ -281,7 +279,7 @@ int mkdir(char *path) {
     }
 }
 
-dir_t *opendir_inode(struct inode *node) {
+dir_t *opendir_inode(inode_t *node) { // inode -> dir
     if (node == NULL || !node->is_dir) {
         return NULL;
     }
@@ -292,28 +290,68 @@ dir_t *opendir_inode(struct inode *node) {
     return res;
 }
 
-dir_t *opendir(char *path) {
+dir_t *opendir_path(char *path) { // path -> dir
     inode_t *node = find_file(path, 0, NOTHING);
     dir_t *res = opendir_inode(node);
     return res;
 }
 
-void closedir(dir_t *dir) {
+void closedir(dir_t *dir) { // close dir
     kmem_free(dir);
 }
 
-inode_t *readdir(char *path) {
-    start_no_irq();
+inode_t *readdir(dir_t *dir) { //dir -> inode
+    lock(&spin_lock_files);
 
-    dir_t *dir = opendir(path);
-    inode_t *res = *dir;
-    if (res == NULL) {
-        end_no_irq();
+    inode_t *result = *dir;
+    if (result == NULL) {
+        unlock(&spin_lock_files);
         return NULL;
     }
-    *dir = res->next;
+    *dir = result->next;
+
+    unlock(&spin_lock_files);
+    return result;
+}
+
+inode_t *readdir_path(char *path) { // path -> inode
+    lock(&spin_lock_files);
+
+    dir_t *dir = opendir_path(path);
+    inode_t *result = *dir;
+    if (result == NULL) {
+        unlock(&spin_lock_files);
+        return NULL;
+    }
+    *dir = result->next;
     closedir(dir);
 
-    end_no_irq();
-    return res;
+    unlock(&spin_lock_files);
+    return result;
+}
+
+void print_tree(struct inode *node, int height) {
+    for (int i = 0; i < height; ++i) {
+        printf("---");
+    }
+
+    if (node->is_dir) {
+        printf("%s/\n", node->name);
+
+        dir_t *dir = opendir_inode(node);
+
+        inode_t *child = readdir(dir);
+        while (child != NULL) {
+            print_tree(child, height + 1);
+            child = readdir(dir);
+        }
+
+        closedir(dir);
+    } else {
+        printf("%s\n", node->name);
+    }
+}
+
+void print_all_files() {
+    print_tree(root, 0);
 }

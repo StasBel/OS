@@ -5,7 +5,7 @@
 
 struct inode {
     char *name;
-    int capacity;
+    int capacity_step;
     uint64_t size;
     struct inode *next;
     struct inode *child;
@@ -42,4 +42,8 @@ long write(int desc, void *buf, size_t n);
 
 int mkdir(char *path);
 
-inode_t *readdir(char *path);
+inode_t *readdir(dir_t *dir); //this
+
+inode_t *readdir_path(char *path); //or this
+
+void print_all_files();

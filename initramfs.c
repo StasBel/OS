@@ -7,14 +7,17 @@
 #include "util.h"
 #include "string.h"
 
+#define MODULE_BIT BIT(3)
+#define FILE_FLAGS CREATE | READ_WRITE
+
 static char *begin, *end;
 
 void setup_initramfs() {
     extern const uint32_t mboot_info;
     multiboot_info_t *multiboot_info = (multiboot_info_t *) (uintptr_t) mboot_info;
 
-    if (!(multiboot_info->flags & (1 << 3))) {
-        printf("No module!");
+    if (!(multiboot_info->flags & MODULE_BIT)) {
+        printf("No modules from multiboot!");
         return;
     }
 
@@ -30,24 +33,23 @@ void setup_initramfs() {
     }
 
     if (!found) {
-        printf("No module!");
+        printf("Cant't find any module!");
         return;
     }
 
+    //reserve memory for initramfs
     begin = (char *) (uintptr_t) module->mod_start;
     end = (char *) (uintptr_t) module->mod_end;
-
-    printf("reserve memory range: %llu-%llu for initramfs\n",
-           (unsigned long long) begin,
-           (unsigned long long) end - 1);
     balloc_add_region((phys_t) begin, end - begin);
     balloc_reserve_region((phys_t) begin, end - begin);
 }
 
-void read_initramfs() {
+void read_all_initramfs() {
     begin = va((phys_t) begin);
     end = va((phys_t) end);
+
     while (begin < end) {
+        //get info from cpio file
         begin = align4(begin);
         DBG_ASSERT(!memcmp(begin, CPIO_HEADER_MAGIC, 6));
         cpio_header_t *header = (cpio_header_t *) begin;
@@ -58,19 +60,23 @@ void read_initramfs() {
             return;
         }
 
+        // read file_name
         char file_name[MAX_FILES];
         file_name[0] = '/';
         for (uint32_t i = 0; i < name_len; i++, begin++) {
             file_name[i + 1] = *begin;
         }
         file_name[name_len] = 0;
+
+        // create | open
         int file = -1;
         if (S_ISDIR(read_int(header->mode))) {
             mkdir(file_name);
         } else {
-            file = open(file_name, CREATE | READ_WRITE);
+            file = open(file_name, FILE_FLAGS);
         }
 
+        // write
         begin = align4(begin);
         if (file != -1) {
             DBG_ASSERT(write(file, begin, file_len) == file_len);

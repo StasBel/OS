@@ -8,14 +8,12 @@
 #include "time.h"
 #include "threads.h"
 #include "files.h"
-#include "lock.h"
 #include "initramfs.h"
 
 #define STUCK while(1)
+#define SETUP_END_MESSAGE "FINISH SETUP\n"
 
 void main(void) {
-    start_no_irq();
-
     setup_serial();
     setup_misc();
     setup_ints();
@@ -24,16 +22,16 @@ void main(void) {
     setup_buddy();
     setup_paging();
     setup_alloc();
-
     setup_threads();
     setup_time();
-
     setup_file_system();
-    read_initramfs();
 
-    end_no_irq();
+    read_all_initramfs();
 
-    printf("FINISH SETUP\n");
+    printf("INITRAMFS FILE TREE:\n");
+    print_all_files();
+
+    printf(SETUP_END_MESSAGE);
 
     STUCK;
 }

@@ -42,6 +42,8 @@ static volatile pid_t current_thread = 1;
 static volatile pid_t previous_thread = 1;
 static thread_pool_t thread_pool;
 
+static DEFINE_SPINLOCK(spin_lock_threads);
+
 void setup_threads() {
     thread_pool.first_free = 2;
     thread_pool.threads[1].state = RUNNING;
@@ -64,7 +66,8 @@ volatile thread_t *get_free_thread() {
 }
 
 pid_t create_thread(void *(*fptr)(void *), void *arg) {
-    start_no_irq();
+    lock(&spin_lock_threads);
+
     volatile thread_t *new_thread = get_free_thread();
     new_thread->order = 10;
     new_thread->stack_start = alloc_pages(new_thread->order);
@@ -78,7 +81,8 @@ pid_t create_thread(void *(*fptr)(void *), void *arg) {
     init_val->function_address = fptr;
     init_val->argument = arg;
     new_thread->state = RUNNING;
-    end_no_irq();
+
+    unlock(&spin_lock_threads);
     return (pid_t) (new_thread - thread_pool.threads);
 }
 
@@ -110,19 +114,22 @@ void run_thread(pid_t thread_id) {
 }
 
 void finish_thread(void *val) {
-    start_no_irq();
+    lock(&spin_lock_threads);
+
     int ct_id = get_this_thread();
     volatile thread_t *current_t = thread_pool.threads + ct_id;
     current_t->state = FINISHED;
     current_t->ret_val = val;
     thread_pool.prev[thread_pool.next[ct_id]] = thread_pool.prev[ct_id];
     thread_pool.next[thread_pool.prev[ct_id]] = thread_pool.next[ct_id];
-    end_no_irq();
+
+    unlock(&spin_lock_threads);
     run_somebody_else();
 }
 
 void run_somebody_else() {
-    start_no_irq();
+    lock(&spin_lock_threads);
+
     for (pid_t index = thread_pool.next[current_thread]; ; index = thread_pool.next[current_thread]) {
         if (index == 0 || thread_pool.threads[index].state != RUNNING) {
             continue;
@@ -130,7 +137,8 @@ void run_somebody_else() {
         run_thread(index);
         break;
     }
-    end_no_irq();
+
+    unlock(&spin_lock_threads);
 }
 
 
@@ -139,12 +147,15 @@ void *join_thread(pid_t thread) {
         run_somebody_else();
         barrier();
     }
-    start_no_irq();
+
+    lock(&spin_lock_threads);
+
     void *ret_val = thread_pool.threads[thread].ret_val;
     thread_pool.threads[thread].state = NOT_STARTED_YET;
     thread_pool.next[thread] = thread_pool.first_free;
     thread_pool.first_free = thread;
-    end_no_irq();
+
+    unlock(&spin_lock_threads);
     return ret_val;
 }
 

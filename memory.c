@@ -230,11 +230,11 @@ pfn_t max_pfns(void)
 static pfn_t buddy_pfn(pfn_t pfn, int order)
 { return pfn ^ ((pfn_t)1 << order); }
 
-static spin_lock_t spin_lock;
+static DEFINE_SPINLOCK(spin_lock_memory);
 
 static struct page *__alloc_pages_node(int order, struct memory_node *node)
 {
-    lock(&spin_lock);
+    lock(&spin_lock_memory);
 	int coorder = order;
 
 	while (coorder < BUDDY_ORDERS) {
@@ -244,7 +244,7 @@ static struct page *__alloc_pages_node(int order, struct memory_node *node)
 	}
 
 	if (coorder >= BUDDY_ORDERS){
-        unlock(&spin_lock);
+        unlock(&spin_lock_memory);
         return 0;
     }
 
@@ -265,7 +265,7 @@ static struct page *__alloc_pages_node(int order, struct memory_node *node)
 		list_add(&buddy->link, &node->free_list[coorder]);
 	}
 
-    unlock(&spin_lock);
+    unlock(&spin_lock_memory);
 	return page;
 }
 
@@ -299,7 +299,7 @@ void dump_buddy_state(void)
 static void __free_pages_node(struct page *pages, int order,
 			struct memory_node *node)
 {
-    lock(&spin_lock);
+    lock(&spin_lock_memory);
 	const pfn_t node_pfns = node->end_pfn - node->begin_pfn;
 	pfn_t pfn = node_pfn(node, pages);
 
@@ -333,7 +333,7 @@ static void __free_pages_node(struct page *pages, int order,
 	page_set_free(pages);
 
 	list_add(&pages->link, &node->free_list[order]);
-    unlock(&spin_lock);
+    unlock(&spin_lock_memory);
 }
 
 void free_pages_node(struct page *pages, int order, struct memory_node *node)
