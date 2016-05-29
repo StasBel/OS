@@ -3,6 +3,9 @@
 
 #include <stdint.h>
 
+#define INTGATE_TYPE 0x8E
+#define TRAPGATE_TYPE 0xEF
+
 struct idt_ptr {
 	uint16_t size;
 	uint64_t base;

@@ -57,3 +57,17 @@ static inline uint32_t read_int(char *str) {
 
 #define	assert(e) \
     if (!(e)) printf("WRONG\n")
+
+#define SPLICE(x, begin, end) (x >> begin) & (BIT(end - begin) - 1)
+#define LOW(x, mod) SPLICE(x, 0, mod)
+
+#define STR(...) #__VA_ARGS__
+#define EXPAND(name) STR(name)
+
+#define VOID_FUNC(name) void name()
+#define CHECK_FLAG(x, value) ((x & value) > 0)
+
+#define CONTAINER_OF(ptr, type, member) \
+    (type *)( (char *)(ptr) - offsetof(type, member) )
+
+#define wmb() asm volatile ("sfence" ::: "memory")

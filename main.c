@@ -10,7 +10,7 @@
 #include "files.h"
 #include "initramfs.h"
 
-#define STUCK while(1)
+#define HALT while(1)
 #define SETUP_END_MESSAGE "FINISH SETUP\n"
 
 void main(void) {
@@ -33,5 +33,5 @@ void main(void) {
 
     printf(SETUP_END_MESSAGE);
 
-    STUCK;
+    HALT;
 }

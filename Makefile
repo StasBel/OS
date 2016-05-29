@@ -13,7 +13,7 @@ ADEP := $(ASM:.S=.d)
 SRC := backtrace.c time.c interrupt.c i8259a.c stdio.c vsinkprintf.c stdlib.c \
 	serial.c console.c string.c ctype.c list.c main.c misc.c balloc.c \
 	memory.c paging.c error.c kmem_cache.c lock.c threads.c test_threads.c \
-	files.c initramfs.c
+	files.c initramfs.c elf.c process.c
 OBJ := $(AOBJ) $(SRC:.c=.o)
 DEP := $(ADEP) $(SRC:.c=.d)
 
@@ -32,7 +32,7 @@ run:
 	qemu-system-x86_64 -kernel kernel -initrd testinitram -serial stdio
 
 pack:
-	./make_initramfs.sh test testinitram
+	./make_initramfs.sh test initramfs
 
 -include $(DEP)
 

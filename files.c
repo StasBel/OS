@@ -232,6 +232,29 @@ long read(int desc, void *buf, size_t n) {
     return k;
 }
 
+long seek(int desc, size_t n) {
+    lock(&spin_lock_files);
+    
+    if (!correct_filesdesc(desc) || (file_descs[desc].flags & WRITE_ONLY)) {
+        unlock(&spin_lock_files);
+        return -1;
+    }
+    
+    file_descs[desc].cur_pos += n;
+    
+    unlock(&spin_lock_files);
+    return n;
+}
+
+size_t get_seek_offset(int desc) {
+    lock(&spin_lock_files);
+    
+    size_t result = file_descs[desc].cur_pos;
+    
+    unlock(&spin_lock_files);
+    return result;
+}
+
 void reallocate(inode_t *node) {
     void *new_page = kmem_alloc((1LLU << (node->capacity_step + 1)) * PAGE_SIZE);
 

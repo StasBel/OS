@@ -512,6 +512,12 @@ void *kmem_alloc(size_t size)
 	return kmem_cache_alloc(kmem_pool[i]);
 }
 
+void *kmem_alloc_aligned(size_t size, int64_t align)
+{
+	void * mem = kmem_alloc(size + align);
+	return (void *)get_aligned_addr((virt_t)mem, align);
+}
+
 void kmem_free(void *ptr)
 {
 	if (!ptr)

@@ -38,6 +38,10 @@ int close(int desc);
 
 long read(int desc, void *buf, size_t n);
 
+long seek(int desc, size_t n);
+
+size_t get_seek_offset(int desc);
+
 long write(int desc, void *buf, size_t n);
 
 int mkdir(char *path);
