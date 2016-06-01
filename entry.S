@@ -39,6 +39,21 @@
 	movq 104(%rsp), %rsi;	\
 	movq 112(%rsp), %rdi;	
 
+	.global __sys_call_handler
+	.extern sys_call_handler
+__sys_call_handler:
+	subq $136, %rsp
+	SAVE_VOLATILE
+	SAVE_NONVOLATILE
+
+	movq %rsp, %rdi
+	call sys_call_handler
+	
+	RESTORE_VOLATILE
+	RESTORE_NONVOLATILE
+	addq $136, %rsp
+	iretq
+
 	.extern isr_common_handler
 common_handler:
 	subq $120, %rsp
@@ -53,6 +68,24 @@ common_handler:
 	RESTORE_NONVOLATILE
 	addq $136, %rsp
 	iretq
+
+	.global __thread_entry
+	.extern thread_entry
+__thread_entry:
+	movq %r15, %rdi
+	movq %r14, %rsi
+	movq %r13, %rdx
+
+	cld
+	call thread_entry
+
+	.global __jump_to_userspace
+__jump_to_userspace:
+	RESTORE_VOLATILE
+	RESTORE_NONVOLATILE
+	addq $136, %rsp
+	iretq
+
 
 #define ENTRY_NAME(nr) entry ## nr
 

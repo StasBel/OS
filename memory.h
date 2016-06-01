@@ -3,7 +3,6 @@
 
 #define PAGE_BITS         12
 #define PAGE_SIZE         (1 << 12)
-#define PAGE_SIZE_2M      (1 << 21)
 #define PAGE_MASK         (PAGE_SIZE - 1)
 #define KERNEL_BASE       0xffffffff80000000
 #define HIGH_BASE         0xffff800000000000
@@ -47,10 +46,9 @@
 #define KERNEL_PAGES      (KERNEL_SIZE / PAGE_SIZE)
 #define KMAP_PAGES        (KMAP_SIZE / PAGE_SIZE)
 
-#define FLAGS_IF (BIT(9))
-
 #include <stdint.h>
 
+#include "locking.h"
 #include "balloc.h"
 #include "list.h"
 
@@ -58,132 +56,96 @@ typedef uintptr_t pfn_t;
 typedef uintptr_t phys_t;
 typedef uintptr_t virt_t;
 
-static inline phys_t kernel_phys(const void *addr) { return KERNEL_PHYS((virt_t) addr); }
+static inline phys_t kernel_phys(const void *addr)
+{ return KERNEL_PHYS((virt_t)addr); }
 
-static inline void *kernel_virt(phys_t paddr) { return (void *) KERNEL_VIRT(paddr); }
+static inline void *kernel_virt(phys_t paddr)
+{ return (void *)KERNEL_VIRT(paddr); }
 
-static inline phys_t pa(const void *vaddr) { return (phys_t) PA((virt_t) vaddr); }
+static inline phys_t pa(const void *vaddr)
+{ return (phys_t)PA((virt_t)vaddr); }
 
-static inline void *va(phys_t paddr) { return (void *) VA(paddr); }
-
-struct gdt_ptr {
-    uint16_t size;
-    uint64_t addr;
-} __attribute__((packed));
-
-static inline void *get_gdt_ptr(void) {
-    struct gdt_ptr ptr;
-
-    __asm__("sgdt %0" : "=m"(ptr));
-    return (void *) ptr.addr;
-}
-
-static inline void load_tr(unsigned short sel) { __asm__("ltr %0" : : "a"(sel)); }
+static inline void *va(phys_t paddr)
+{ return (void *)VA(paddr); }
 
 
 struct memory_node;
 struct kmem_slab;
 
 struct page {
-    unsigned long flags;
-    struct list_head link;
+	unsigned long flags;
+	struct list_head link;
 
-    union {
-        struct kmem_slab *slab;
-        unsigned long refcount;
-        int order;
-    } u;
+	union {
+		struct kmem_slab *slab;
+		unsigned long refcount;
+		int order;
+	} u;
 };
 
-static inline int page_node_id(const struct page *page) { return page->flags & PAGE_NODE_MASK; }
+static inline int page_node_id(const struct page *page)
+{ return page->flags & PAGE_NODE_MASK; }
 
-static inline bool page_busy(const struct page *page) { return (page->flags & PAGE_BUSY_MASK) != 0; }
+static inline bool page_busy(const struct page *page)
+{ return (page->flags & PAGE_BUSY_MASK) != 0; }
 
-static inline bool page_free(const struct page *page) { return !page_busy(page); }
+static inline bool page_free(const struct page *page)
+{ return !page_busy(page); }
 
-static inline void page_set_busy(struct page *page) { page->flags |= PAGE_BUSY_MASK; }
+static inline void page_set_busy(struct page *page)
+{ page->flags |= PAGE_BUSY_MASK; }
 
-static inline void page_set_free(struct page *page) { page->flags &= ~PAGE_BUSY_MASK; }
+static inline void page_set_free(struct page *page)
+{ page->flags &= ~PAGE_BUSY_MASK; }
 
-static inline int page_get_order(const struct page *page) { return page->u.order; }
+static inline int page_get_order(const struct page *page)
+{ return page->u.order; }
 
-static inline void page_set_order(struct page *page, int order) { page->u.order = order; }
+static inline void page_set_order(struct page *page, int order)
+{ page->u.order = order; }
 
 
 enum node_type {
-    NT_LOW,
-    NT_HIGH,
-    NT_COUNT
+	NT_LOW,
+	NT_HIGH,
+	NT_COUNT
 };
 
 struct memory_node {
-    struct list_head link;
-    struct page *mmap;
-    pfn_t begin_pfn;
-    pfn_t end_pfn;
-    int id;
-    enum node_type type;
+	struct list_head link;
+	struct page *mmap;
+	struct spinlock lock;
+	pfn_t begin_pfn;
+	pfn_t end_pfn;
+	int id;
+	enum node_type type;
 
-    struct list_head free_list[BUDDY_ORDERS];
+	struct list_head free_list[BUDDY_ORDERS];
 };
-
-static inline virt_t get_aligned_addr(virt_t addr, uint64_t align){
-	if(addr % align == 0)
-		return addr;
-	return (addr / align + 1) * align;
-}
 
 void memory_free_region(unsigned long long addr, unsigned long long size);
 
 struct memory_node *memory_node_get(int id);
-
 pfn_t max_pfns(void);
-
 struct page *pfn2page(pfn_t pfn);
-
 pfn_t page2pfn(const struct page *page);
-
 struct page *alloc_pages_node(int order, struct memory_node *node);
-
 void free_pages_node(struct page *pages, int order, struct memory_node *node);
-
 struct page *__alloc_pages(int order, int type);
-
 struct page *alloc_pages(int order);
-
 void free_pages(struct page *pages, int order);
 
-static inline struct memory_node *page_node(const struct page *page) { return memory_node_get(page_node_id(page)); }
+static inline struct memory_node *page_node(const struct page *page)
+{ return memory_node_get(page_node_id(page)); }
 
-static inline phys_t page_paddr(struct page *page) { return (phys_t) page2pfn(page) << PAGE_BITS; }
+static inline phys_t page_paddr(struct page *page)
+{ return (phys_t)page2pfn(page) << PAGE_BITS; }
 
-static inline void *page_addr(struct page *page) { return va(page_paddr(page)); }
+static inline void *page_addr(struct page *page)
+{ return va(page_paddr(page)); }
 
 void setup_memory(void);
-
 void setup_buddy(void);
-
-static inline uint64_t get_flags() {
-	uint64_t rflags;
-	__asm__ volatile("pushq %rax;\n" \
-					  "pushfq;\n" \
-					  "popq %rax;\n" );
-	__asm__ volatile("movq %%rax, %0":"=m"(rflags));
-	__asm__ volatile( "popq %rax;\n" );
-	return rflags;
-}
-
-static inline bool flags_if(){
-	return (get_flags() & FLAGS_IF) > 0;
-}
-
-typedef struct{
-	uint64_t rip;
-	uint64_t cs;
-	uint64_t flags;
-	uint64_t rsp;
-	uint64_t ss;
-}__attribute__((__packed__))userspace_jumping_args;
 
 #endif /*__ASM_FILE__*/
 

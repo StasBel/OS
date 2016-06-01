@@ -525,7 +525,6 @@ void kunmap(void *vaddr)
 		iter.pt[level][idx] = 0;
 		flush_tlb_addr(virt);
 		virt += PAGE_SIZE;
-		virt += PAGE_SIZE;
 	}
 	kmap_free_range(range, range->pages);
 }

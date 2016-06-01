@@ -1,37 +1,63 @@
 #include "kmem_cache.h"
 #include "interrupt.h"
+#include "initramfs.h"
+#include "threads.h"
 #include "memory.h"
 #include "serial.h"
 #include "paging.h"
 #include "stdio.h"
+#include "ramfs.h"
 #include "misc.h"
 #include "time.h"
-#include "threads.h"
-#include "files.h"
-#include "initramfs.h"
+#include "vfs.h"
+#include "elf.h"
 
-#define HALT while(1)
-#define SETUP_END_MESSAGE "FINISH SETUP\n"
+static void syscall(uint64_t syscall, uint64_t arg1, uint64_t arg2)
+{
+    __asm__ ("movq %0, %%rax\n\r"
+             "movq %1, %%rbx\n\r"
+             "movq %2, %%rcx\n\r"
+             "int $48\n\r"
+             :
+             : "m"(syscall), "m"(arg1), "m"(arg2)
+             : "rax", "rbx", "rcx", "memory");
+}
 
-void main(void) {
-    setup_serial();
-    setup_misc();
-    setup_ints();
-    setup_memory();
-    setup_initramfs();
-    setup_buddy();
-    setup_paging();
-    setup_alloc();
-    setup_threads();
-    setup_time();
-    setup_file_system();
+static void test_syscalls()
+{
+    syscall(0, (uint64_t)"Test ", sizeof("Test ") - 1);
+    syscall(0, (uint64_t)"message.\n", sizeof("message.\n") - 1);
+}
 
-    read_all_initramfs();
+static int start_kernel(void *dummy)
+{
+	(void) dummy;
 
-    printf("INITRAMFS FILE TREE:\n");
-    print_all_files();
+	setup_ramfs();
+	setup_initramfs();
 
-    printf(SETUP_END_MESSAGE);
+    test_syscalls();
+    wait(run_elf());
 
-    HALT;
+	return 0;
+}
+
+void main(void)
+{
+	setup_serial();
+	setup_misc();
+	setup_ints();
+	setup_memory();
+	setup_buddy();
+	setup_paging();
+	setup_alloc();
+	setup_time();
+	setup_threading();
+	setup_vfs();
+
+	create_kthread(&start_kernel, 0);
+	local_preempt_enable();
+	idle();
+
+	while (1);
 }

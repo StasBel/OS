@@ -1,8 +1,8 @@
 #include "kmem_cache.h"
+#include "locking.h"
 #include "memory.h"
 #include "stdio.h"
 #include "list.h"
-#include "lock.h"
 
 
 struct kmem_slab_ops {
@@ -29,6 +29,7 @@ struct kmem_cache {
 	struct list_head part_list;
 	struct list_head free_list;
 	struct list_head full_list;
+	struct spinlock lock;
 	size_t object_align;
 	size_t object_size;
 	int order;
@@ -40,6 +41,7 @@ static void kmem_cache_init(struct kmem_cache *cache)
 	list_init(&cache->free_list);
 	list_init(&cache->part_list);
 	list_init(&cache->full_list);
+	spinlock_init(&cache->lock);
 }
 
 static bool kmem_cache_grow(struct kmem_cache *cache)
@@ -63,19 +65,19 @@ static bool kmem_cache_grow(struct kmem_cache *cache)
 	slab->cache = cache;
 	slab->pages = pages;
 
+	const bool enabled = spin_lock_irqsave(&cache->lock);
 	list_add(&slab->link, &cache->free_list);
+	spin_unlock_irqrestore(&cache->lock, enabled);
 
 	return true;
 }
 
-static DEFINE_SPINLOCK(spin_lock_kmem);
-
 void kmem_cache_reap(struct kmem_cache *cache)
 {
-	lock(&spin_lock_kmem);
 	LIST_HEAD(list);
-
+	const bool enabled = spin_lock_irqsave(&cache->lock);
 	list_splice(&cache->free_list, &list);
+	spin_unlock_irqrestore(&cache->lock, enabled);
 
 	for (struct list_head *ptr = list.next; ptr != &list;) {
 		struct kmem_slab *slab =
@@ -88,13 +90,11 @@ void kmem_cache_reap(struct kmem_cache *cache)
 
 		free_pages(pages, cache->order);	
 	}
-	unlock(&spin_lock_kmem);
 }
 
 void *kmem_cache_alloc(struct kmem_cache *cache)
 {
-	lock(&spin_lock_kmem);
-	//start_no_irq();
+	const bool enabled = spin_lock_irqsave(&cache->lock);
 
 	if (!list_empty(&cache->part_list)) {
 		struct list_head *node = list_first(&cache->part_list);
@@ -109,17 +109,14 @@ void *kmem_cache_alloc(struct kmem_cache *cache)
 			list_del(&slab->link);
 			list_add(&slab->link, &cache->full_list);
 		}
-
-        unlock(&spin_lock_kmem);
-		//end_no_irq();
+		spin_unlock_irqrestore(&cache->lock, enabled);
 		return ptr;
 	}
 
 	if (list_empty(&cache->free_list) && !kmem_cache_grow(cache)) {
-        unlock(&spin_lock_kmem);
-        //end_no_irq();
+		spin_unlock_irqrestore(&cache->lock, enabled);
 		return 0;
-    }
+	}
 
 	struct list_head *node = list_first(&cache->free_list);
 	struct kmem_slab *slab = LIST_ENTRY(node, struct kmem_slab, link);
@@ -131,9 +128,7 @@ void *kmem_cache_alloc(struct kmem_cache *cache)
 	list_del(&slab->link);
 	list_add(&slab->link, &cache->part_list);
 
-	unlock(&spin_lock_kmem);
-	//end_no_irq();
-
+	spin_unlock_irqrestore(&cache->lock, enabled);
 	return ptr;
 }
 
@@ -146,8 +141,8 @@ static struct kmem_slab *kmem_get_slab(void *ptr)
 
 void kmem_cache_free(struct kmem_cache *cache, void *ptr)
 {
-	lock(&spin_lock_kmem);
 	struct kmem_slab *slab = kmem_get_slab(ptr);
+	const bool enabled = spin_lock_irqsave(&cache->lock);
 
 	slab->ops->free(cache, slab, ptr);
 	++slab->free;
@@ -155,7 +150,7 @@ void kmem_cache_free(struct kmem_cache *cache, void *ptr)
 	if (slab->free == slab->total) {
 		list_del(&slab->link);
 		list_add(&slab->link, &cache->free_list);
-        unlock(&spin_lock_kmem);
+		spin_unlock_irqrestore(&cache->lock, enabled);
 		return;
 	}
 
@@ -163,7 +158,7 @@ void kmem_cache_free(struct kmem_cache *cache, void *ptr)
 		list_del(&slab->link);
 		list_add(&slab->link, &cache->part_list);
 	}
-	unlock(&spin_lock_kmem);
+	spin_unlock_irqrestore(&cache->lock, enabled);
 }
 
 
@@ -510,12 +505,6 @@ void *kmem_alloc(size_t size)
 		return 0;
 
 	return kmem_cache_alloc(kmem_pool[i]);
-}
-
-void *kmem_alloc_aligned(size_t size, int64_t align)
-{
-	void * mem = kmem_alloc(size + align);
-	return (void *)get_aligned_addr((virt_t)mem, align);
 }
 
 void kmem_free(void *ptr)

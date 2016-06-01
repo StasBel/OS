@@ -74,13 +74,6 @@ struct pt_iter {
 	virt_t addr;
 };
 
-typedef struct{
-	phys_t phys_start;
-	virt_t virt_start;
-	uint64_t len;
-
-}paging_map_region;
-
 struct pt_iter *pt_iter_set(struct pt_iter *iter, pte_t *pt, virt_t addr);
 struct pt_iter *pt_iter_next(struct pt_iter *iter);
 bool pt_iter_present(const struct pt_iter *iter);
@@ -137,6 +130,9 @@ static inline phys_t load_pml4(void)
 
 static inline void flush_tlb_addr(virt_t vaddr)
 { __asm__ volatile ("invlpg (%0)" : : "r"(vaddr) : "memory"); }
+
+static inline void flush_tlb(void)
+{ store_pml4(load_pml4()); }
 
 void *kmap(struct page **pages, size_t count);
 void kunmap(void *ptr);

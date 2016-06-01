@@ -1,11 +1,11 @@
 #include <stdint.h>
 
+#include "locking.h"
 #include "kernel.h"
 #include "memory.h"
 #include "balloc.h"
 #include "stdio.h"
 #include "misc.h"
-#include "lock.h"
 
 #define MAX_MEMORY_NODES (1 << PAGE_NODE_BITS)
 
@@ -53,6 +53,7 @@ static void __memory_node_add(enum node_type type, unsigned long begin,
 	const pfn_t pfn = begin >> PAGE_BITS;
 
 	list_init(&node->link);
+	spinlock_init(&node->lock);
 	node->begin_pfn = pfn;
 	node->end_pfn = pfn + pages;
 	node->id = memory_nodes++;
@@ -162,6 +163,7 @@ void setup_memory(void)
 	const phys_t kernel_end = (phys_t)bss_phys_end;
 
 	balloc_add_region(kernel_begin, kernel_end - kernel_begin);
+	balloc_add_region(initrd_begin, initrd_end - initrd_begin);
 
 	for (int i = 0; i != memory_map_size; ++i) {
 		const struct mmap_entry *entry = memory_map + i;
@@ -174,6 +176,11 @@ void setup_memory(void)
 			(unsigned long long) kernel_begin,
 			(unsigned long long) kernel_end - 1);
 	balloc_reserve_region(kernel_begin, kernel_end - kernel_begin);
+
+	printf("reserve memory range: %#llx-%#llx for initrd\n",
+			(unsigned long long) initrd_begin,
+			(unsigned long long) initrd_end - 1);
+	balloc_reserve_region(initrd_begin, initrd_end - initrd_begin);
 }
 
 void setup_buddy(void)
@@ -230,11 +237,8 @@ pfn_t max_pfns(void)
 static pfn_t buddy_pfn(pfn_t pfn, int order)
 { return pfn ^ ((pfn_t)1 << order); }
 
-static DEFINE_SPINLOCK(spin_lock_memory);
-
 static struct page *__alloc_pages_node(int order, struct memory_node *node)
 {
-    lock(&spin_lock_memory);
 	int coorder = order;
 
 	while (coorder < BUDDY_ORDERS) {
@@ -243,10 +247,8 @@ static struct page *__alloc_pages_node(int order, struct memory_node *node)
 		++coorder;
 	}
 
-	if (coorder >= BUDDY_ORDERS){
-        unlock(&spin_lock_memory);
-        return 0;
-    }
+	if (coorder >= BUDDY_ORDERS)
+		return 0;
 
 	struct page *page = LIST_ENTRY(list_first(&node->free_list[coorder]),
 				struct page, link);
@@ -265,13 +267,15 @@ static struct page *__alloc_pages_node(int order, struct memory_node *node)
 		list_add(&buddy->link, &node->free_list[coorder]);
 	}
 
-    unlock(&spin_lock_memory);
 	return page;
 }
 
 struct page *alloc_pages_node(int order, struct memory_node *node)
 {
+	const bool enabled = spin_lock_irqsave(&node->lock);
 	struct page * pages = __alloc_pages_node(order, node);
+
+	spin_unlock_irqrestore(&node->lock, enabled);
 
 	return pages;
 }
@@ -299,7 +303,6 @@ void dump_buddy_state(void)
 static void __free_pages_node(struct page *pages, int order,
 			struct memory_node *node)
 {
-    lock(&spin_lock_memory);
 	const pfn_t node_pfns = node->end_pfn - node->begin_pfn;
 	pfn_t pfn = node_pfn(node, pages);
 
@@ -333,7 +336,6 @@ static void __free_pages_node(struct page *pages, int order,
 	page_set_free(pages);
 
 	list_add(&pages->link, &node->free_list[order]);
-    unlock(&spin_lock_memory);
 }
 
 void free_pages_node(struct page *pages, int order, struct memory_node *node)
@@ -341,7 +343,10 @@ void free_pages_node(struct page *pages, int order, struct memory_node *node)
 	if (!pages)
 		return;
 
+	const bool enabled = spin_lock_irqsave(&node->lock);
+
 	__free_pages_node(pages, order, node);
+	spin_unlock_irqrestore(&node->lock, enabled);
 }
 
 struct page *__alloc_pages(int order, int type)
@@ -354,9 +359,8 @@ struct page *__alloc_pages(int order, int type)
 					link);
 		struct page *pages = alloc_pages_node(order, node);
 
-		if (pages) {
-            return pages;
-        }
+		if (pages)
+			return pages;
 	}
 
 	return 0;
@@ -369,9 +373,8 @@ struct page *alloc_pages(int order)
 
 void free_pages(struct page *pages, int order)
 {
-	if (!pages){
-        return;
-    }
+	if (!pages)
+		return;
 
 	struct memory_node *node = page_node(pages);
 

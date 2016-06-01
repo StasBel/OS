@@ -12,7 +12,6 @@ void kmem_cache_free(struct kmem_cache *cache, void *ptr);
 void kmem_cache_reap(struct kmem_cache *cache);
 
 void *kmem_alloc(size_t size);
-void *kmem_alloc_aligned(size_t size, int64_t align);
 void kmem_free(void *ptr);
 
 void setup_alloc(void);

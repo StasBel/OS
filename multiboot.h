@@ -27,15 +27,4 @@ struct multiboot_info {
 	uint32_t vbe_interface_len;
 } __attribute__((packed));
 
-typedef struct multiboot_info multiboot_info_t;
-
-struct multiboot_module {
-	uint32_t mod_start;
-	uint32_t mod_end;
-	uint32_t string;
-	uint32_t reserved;
-} __attribute__((packed));
-
-typedef struct multiboot_module multiboot_module_t;
-
 #endif /*__MULTIBOOT_H__*/

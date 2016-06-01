@@ -1,19 +1,19 @@
-CC := gcc
-LD := gcc
+CC := x86_64-elf-gcc
+LD := x86_64-elf-gcc
 
 CFLAGS := -g -m64 -mno-red-zone -mno-mmx -mno-sse -mno-sse2 -ffreestanding \
 	-mcmodel=kernel -Wall -Wextra -Werror -pedantic -std=c99 \
-	-Wframe-larger-than=65584 -Wstack-usage=65584 -Wno-unknown-warning-option
+	-Wframe-larger-than=4096 -Wstack-usage=4096 -Wno-unknown-warning-option
 LFLAGS := -nostdlib -z max-page-size=0x1000
 
-ASM := bootstrap.S videomem.S entry.S threading.S
-AOBJ := $(ASM:.S=.o)
-ADEP := $(ASM:.S=.d)
+ASM := bootstrap.S videomem.S entry.S switch.S
+AOBJ:= $(ASM:.S=.o)
+ADEP:= $(ASM:.S=.d)
 
 SRC := backtrace.c time.c interrupt.c i8259a.c stdio.c vsinkprintf.c stdlib.c \
 	serial.c console.c string.c ctype.c list.c main.c misc.c balloc.c \
-	memory.c paging.c error.c kmem_cache.c lock.c threads.c test_threads.c \
-	files.c initramfs.c elf.c process.c
+	memory.c paging.c error.c kmem_cache.c locking.c threads.c scheduler.c \
+	rbtree.c mm.c vfs.c ramfs.c initramfs.c ramfs_smoke_test.c elf.c
 OBJ := $(AOBJ) $(SRC:.c=.o)
 DEP := $(ADEP) $(SRC:.c=.d)
 
@@ -29,10 +29,10 @@ kernel: $(OBJ) kernel.ld
 	$(CC) $(CFLAGS) -MMD -c $< -o $@
 
 run:
-	qemu-system-x86_64 -kernel kernel -initrd testinitram -serial stdio
-
+	qemu-system-x86_64 -kernel kernel -initrd ramfs -serial stdio
+	
 pack:
-	./make_initramfs.sh test initramfs
+	./make_initramfs.sh initramfs ramfs
 
 -include $(DEP)
 
