@@ -1,5 +1,5 @@
-CC := x86_64-elf-gcc
-LD := x86_64-elf-gcc
+CC ?= gcc
+LD ?= gcc
 
 CFLAGS := -g -m64 -mno-red-zone -mno-mmx -mno-sse -mno-sse2 -ffreestanding \
 	-mcmodel=kernel -Wall -Wextra -Werror -pedantic -std=c99 \
